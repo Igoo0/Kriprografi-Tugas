@@ -61,134 +61,98 @@ void printHex(const string &data)
 }
 //-----------------------
 
-class ChaCha20
+void initialize_state(array<uint32_t, 16> &state, const uint8_t key[CHACHA20_KEY_SIZE], const uint8_t nonce[CHACHA20_NONCE_SIZE])
 {
-public:
-    ChaCha20(const uint8_t key[CHACHA20_KEY_SIZE], const uint8_t nonce[CHACHA20_NONCE_SIZE])
-    {
-        // Set the initial state
-        memcpy(initialState.data(), key, CHACHA20_KEY_SIZE);
-        memcpy(initialState.data() + 4, nonce, CHACHA20_NONCE_SIZE);
-        initialState[12] = 0; // Block counter
-        initialState[13] = 0; // Block counter
+    // Set nilai awal dari state
+    state[0] = 0x61707865; // "expa"
+    state[1] = 0x3320646e; // "nd 3"
+    state[2] = 0x79622d32; // "2-by"
+    state[3] = 0x6b206574; // "te k"
 
-        // Constant values for ChaCha20
-        initialState[0] = 0x61707865; // "expa"
-        initialState[1] = 0x3320646e; // "nd 3"
-        initialState[2] = 0x79622d32; // "2-by"
-        initialState[3] = 0x6b206574; // "te k"
-    }
+    // Memindahkan key ke state
+    memcpy(&state[4], key, CHACHA20_KEY_SIZE);
 
-    void encrypt(const uint8_t *plaintext, size_t plaintext_len, uint8_t *ciphertext)
-    {
-        for (size_t i = 0; i < plaintext_len; i += CHACHA20_BLOCK_SIZE)
-        {
-            // Generate keystream block
-            uint32_t block[16];
-            memcpy(block, initialState.data(), sizeof(block)); // Copy initial state to block
-            block[12] += 1;                                    // Increment block counter
-            chacha20_block(block);
+    // Memindahkan nonce ke state
+    memcpy(&state[13], nonce, CHACHA20_NONCE_SIZE);
 
-            // Encrypt block
-            for (size_t j = 0; j < CHACHA20_BLOCK_SIZE && (i + j) < plaintext_len; ++j)
-            {
-                ciphertext[i + j] = plaintext[i + j] ^ ((uint8_t *)block)[j];
-            }
-        }
-    }
-
-private:
-    array<uint32_t, 16> initialState{};
-
-    void chacha20_block(uint32_t *block)
-    {
-        for (size_t i = 0; i < 20; i += 2)
-        {
-            quarter_round(block[0], block[4], block[8], block[12]);
-            quarter_round(block[1], block[5], block[9], block[13]);
-            quarter_round(block[2], block[6], block[10], block[14]);
-            quarter_round(block[3], block[7], block[11], block[15]);
-
-            quarter_round(block[0], block[5], block[10], block[15]);
-            quarter_round(block[1], block[6], block[11], block[12]);
-            quarter_round(block[2], block[7], block[8], block[13]);
-            quarter_round(block[3], block[4], block[9], block[14]);
-        }
-
-        for (size_t i = 0; i < 16; ++i)
-        {
-            block[i] += initialState[i];
-        }
-    }
-
-    void quarter_round(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d)
-    {
-        a += b;
-        d ^= a;
-        d = rotate_left(d, 16);
-        c += d;
-        b ^= c;
-        b = rotate_left(b, 12);
-        a += b;
-        d ^= a;
-        d = rotate_left(d, 8);
-        c += d;
-        b ^= c;
-        b = rotate_left(b, 7);
-    }
-
-    uint32_t rotate_left(uint32_t value, size_t amount)
-    {
-        return (value << amount) | (value >> (32 - amount));
-    }
-};
-
-int chacha()
-{
-    // Key (32 bytes for ChaCha20)
-    uint8_t key[CHACHA20_KEY_SIZE];
-    for (size_t i = 0; i < CHACHA20_KEY_SIZE; ++i)
-    {
-        key[i] = static_cast<uint8_t>(i); // Example key (should be random)
-    }
-
-    // Nonce (12 bytes for ChaCha20)
-    uint8_t nonce[CHACHA20_NONCE_SIZE] = {0}; // Example nonce (should be random)
-
-    // Input plaintext from the user
-    string input;
-    cout << "Enter text to encrypt: ";
-    getline(cin, input);
-    size_t plaintext_len = input.length();
-
-    // Buffer for ciphertext and decrypted text
-    vector<uint8_t> ciphertext(plaintext_len);
-    vector<uint8_t> decryptedtext(plaintext_len + 1); // +1 for null terminator
-
-    // Create ChaCha20 instance
-    ChaCha20 chacha20(key, nonce);
-
-    // Encrypt the message
-    chacha20.encrypt(reinterpret_cast<const uint8_t *>(input.c_str()), plaintext_len, ciphertext.data());
-
-    // Output ciphertext
-    cout << "Ciphertext: ";
-    for (size_t i = 0; i < plaintext_len; i++)
-    {
-        printf("%02x ", ciphertext[i]);
-    }
-    cout << endl;
-
-    // Decrypt the message (encryption and decryption are the same)
-    chacha20.encrypt(ciphertext.data(), plaintext_len, decryptedtext.data());
-    decryptedtext[plaintext_len] = '\0'; // Null-terminate
-
-    // Output decrypted text
-    cout << "Decrypted text: " << decryptedtext.data() << endl;
-    
-
-    return 0;
+    // Inisialisasi block counter
+    state[12] = 0;
 }
+
+// Fungsi untuk rotasi bit ke kiri
+uint32_t rotate_left(uint32_t value, size_t amount)
+{
+    return (value << amount) | (value >> (32 - amount));
+}
+
+// Fungsi untuk melakukan quarter round pada ChaCha20
+void quarter_round(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d)
+{
+    a += b;
+    d ^= a;
+    d = rotate_left(d, 16);
+    c += d;
+    b ^= c;
+    b = rotate_left(b, 12);
+    a += b;
+    d ^= a;
+    d = rotate_left(d, 8);
+    c += d;
+    b ^= c;
+    b = rotate_left(b, 7);
+}
+
+// Fungsi untuk memproses satu block pada ChaCha20
+void chacha20_block(array<uint32_t, 16> &block)
+{
+    array<uint32_t, 16> working_block = block; // Salin block awal ke working block
+
+    for (size_t i = 0; i < 20; i += 2)
+    {
+        // Odd round
+        quarter_round(working_block[0], working_block[4], working_block[8], working_block[12]);
+        quarter_round(working_block[1], working_block[5], working_block[9], working_block[13]);
+        quarter_round(working_block[2], working_block[6], working_block[10], working_block[14]);
+        quarter_round(working_block[3], working_block[7], working_block[11], working_block[15]);
+
+        // Even round
+        quarter_round(working_block[0], working_block[5], working_block[10], working_block[15]);
+        quarter_round(working_block[1], working_block[6], working_block[11], working_block[12]);
+        quarter_round(working_block[2], working_block[7], working_block[8], working_block[13]);
+        quarter_round(working_block[3], working_block[4], working_block[9], working_block[14]);
+    }
+
+    // Menambahkan hasil block akhir ke block awal
+    for (size_t i = 0; i < 16; ++i)
+    {
+        block[i] += working_block[i];
+    }
+}
+
+// Fungsi untuk enkripsi menggunakan ChaCha20
+void chacha20_encrypt(const uint8_t *plaintext, size_t plaintext_len, uint8_t *ciphertext, const uint8_t key[CHACHA20_KEY_SIZE], const uint8_t nonce[CHACHA20_NONCE_SIZE])
+{
+    array<uint32_t, 16> state;
+    initialize_state(state, key, nonce);
+
+    for (size_t i = 0; i < plaintext_len; i += CHACHA20_BLOCK_SIZE)
+    {
+        array<uint32_t, 16> block = state; // Salin state ke block
+
+        // Proses block
+        chacha20_block(block);
+
+        // Encrypt block
+        for (size_t j = 0; j < CHACHA20_BLOCK_SIZE && (i + j) < plaintext_len; ++j)
+        {
+            ciphertext[i + j] = plaintext[i + j] ^ ((uint8_t *)block.data())[j];
+        }
+
+        // Increment block counter
+        state[12]++;
+    }
+}
+
 
 // Fungsi Caesar
 string enkripsi_caesar(string plaintext, int kunci)
@@ -259,6 +223,8 @@ string dekripsi_viginere(string chipertext, string kunci)
 void caesar();
 void viginere();
 void rc4();
+int chacha_procedural();
+void mix_caesar_viginere();
 
 int main()
 {
@@ -299,7 +265,7 @@ int main()
 
         case 3:
         {
-            chacha();
+            chacha_procedural();
             i = 0;
         }
             break;
@@ -313,8 +279,10 @@ int main()
 
         case 5:
         {
-            
+            mix_caesar_viginere();
+            i = 0;
         }
+            break;
 
         case 0:
         {
@@ -387,4 +355,77 @@ void rc4()
     // Dekripsi (dapat menggunakan fungsi yang sama)
     string decrypted = rc4(key, ciphertext);
     cout << "Hasil dekripsi: " << decrypted << endl;
+}
+
+int chacha_procedural()
+{
+    // Key (32 bytes untuk ChaCha20)
+    uint8_t key[CHACHA20_KEY_SIZE];
+    for (size_t i = 0; i < CHACHA20_KEY_SIZE; ++i)
+    {
+        key[i] = static_cast<uint8_t>(i); // Contoh key (harusnya acak)
+    }
+
+    // Nonce (12 bytes untuk ChaCha20)
+    uint8_t nonce[CHACHA20_NONCE_SIZE] = {0}; // Contoh nonce (harusnya acak)
+
+    // Input plaintext dari user
+    string input;
+    cout << "Masukkan pesan: ";
+    getline(cin, input);
+    size_t plaintext_len = input.length();
+
+    // Buffer untuk ciphertext dan decrypted text
+    vector<uint8_t> ciphertext(plaintext_len);
+    vector<uint8_t> decryptedtext(plaintext_len + 1); // +1 untuk null terminator
+
+    // Enkripsi
+    chacha20_encrypt(reinterpret_cast<const uint8_t *>(input.c_str()), plaintext_len, ciphertext.data(), key, nonce);
+
+    // Output ciphertext
+    cout << "Enkripsi: ";
+    for (size_t i = 0; i < plaintext_len; i++)
+    {
+        printf("%02x ", ciphertext[i]);
+    }
+    cout << endl;
+
+    // Dekripsi (ChaCha20 encryption dan decryption sama)
+    chacha20_encrypt(ciphertext.data(), plaintext_len, decryptedtext.data(), key, nonce);
+    decryptedtext[plaintext_len] = '\0'; // Null-terminate
+
+    // Output decrypted text
+    cout << "Dekripsi: " << decryptedtext.data() << endl;
+
+    return 0;
+}
+
+// Fungsi Mix Caesar dan Vigenere
+void mix_caesar_viginere()
+{
+    string pesan;
+    string kunci_viginere;
+    int kunci_caesar;
+
+    cout << "Masukkan pesan: ";
+    getline(cin, pesan);
+
+    cout << "Masukkan kunci Vigenere (kata): ";
+    getline(cin, kunci_viginere);
+
+    cout << "Masukkan kunci Caesar (bilangan bulat): ";
+    cin >> kunci_caesar;
+    cin.ignore(); // Bersihkan buffer setelah input bilangan bulat
+
+    // Enkripsi Caesar terlebih dahulu
+    string pesan_terenkripsi_caesar = enkripsi_caesar(pesan, kunci_caesar);
+    // Lanjutkan dengan enkripsi Vigenere
+    string pesan_terenkripsi_mix = enkripsi_viginere(pesan_terenkripsi_caesar, kunci_viginere);
+    cout << "Pesan terenkripsi dengan Mix Caesar dan Vigenere: " << pesan_terenkripsi_mix << endl;
+
+    // Dekripsi Vigenere terlebih dahulu
+    string pesan_terdekripsi_viginere = dekripsi_viginere(pesan_terenkripsi_mix, kunci_viginere);
+    // Lanjutkan dengan dekripsi Caesar
+    string pesan_terdekripsi_mix = dekripsi_caesar(pesan_terdekripsi_viginere, kunci_caesar);
+    cout << "Pesan terdekripsi dengan Mix Caesar dan Vigenere: " << pesan_terdekripsi_mix << endl;
 }
