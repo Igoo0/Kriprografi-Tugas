@@ -9,149 +9,6 @@
 
 using namespace std;
 
-constexpr size_t CHACHA20_KEY_SIZE = 32;
-constexpr size_t CHACHA20_NONCE_SIZE = 12;
-constexpr size_t CHACHA20_BLOCK_SIZE = 64;
-
-//-----------------------
-// Fungsi untuk menginisialisasi S-Box
-void initializeSBox(vector<int> &S, const string &key)
-{
-    int keyLength = key.length();
-    for (int i = 0; i < 256; i++)
-    {
-        S[i] = i;
-    }
-
-    int j = 0;
-    for (int i = 0; i < 256; i++)
-    {
-        j = (j + S[i] + key[i % keyLength]) % 256;
-        swap(S[i], S[j]);
-    }
-}
-
-// Fungsi untuk melakukan enkripsi dan dekripsi
-string rc4(const string &key, const string &plaintext)
-{
-    vector<int> S(256);
-    initializeSBox(S, key);
-
-    int i = 0, j = 0;
-    string ciphertext;
-    for (char c : plaintext)
-    {
-        i = (i + 1) % 256;
-        j = (j + S[i]) % 256;
-        swap(S[i], S[j]);
-        int k = S[(S[i] + S[j]) % 256];
-        ciphertext += c ^ k; // Operasi XOR
-    }
-    return ciphertext;
-}
-
-// Fungsi untuk menampilkan hasil dalam format heksadesimal
-void printHex(const string &data)
-{
-    for (unsigned char c : data)
-    {
-        printf("%02X ", c);
-    }
-    cout << endl;
-}
-//-----------------------
-
-void initialize_state(array<uint32_t, 16> &state, const uint8_t key[CHACHA20_KEY_SIZE], const uint8_t nonce[CHACHA20_NONCE_SIZE])
-{
-    // Set nilai awal dari state
-    state[0] = 0x61707865; // "expa"
-    state[1] = 0x3320646e; // "nd 3"
-    state[2] = 0x79622d32; // "2-by"
-    state[3] = 0x6b206574; // "te k"
-
-    // Memindahkan key ke state
-    memcpy(&state[4], key, CHACHA20_KEY_SIZE);
-
-    // Memindahkan nonce ke state
-    memcpy(&state[13], nonce, CHACHA20_NONCE_SIZE);
-
-    // Inisialisasi block counter
-    state[12] = 0;
-}
-
-// Fungsi untuk rotasi bit ke kiri
-uint32_t rotate_left(uint32_t value, size_t amount)
-{
-    return (value << amount) | (value >> (32 - amount));
-}
-
-// Fungsi untuk melakukan quarter round pada ChaCha20
-void quarter_round(uint32_t &a, uint32_t &b, uint32_t &c, uint32_t &d)
-{
-    a += b;
-    d ^= a;
-    d = rotate_left(d, 16);
-    c += d;
-    b ^= c;
-    b = rotate_left(b, 12);
-    a += b;
-    d ^= a;
-    d = rotate_left(d, 8);
-    c += d;
-    b ^= c;
-    b = rotate_left(b, 7);
-}
-
-// Fungsi untuk memproses satu block pada ChaCha20
-void chacha20_block(array<uint32_t, 16> &block)
-{
-    array<uint32_t, 16> working_block = block; // Salin block awal ke working block
-
-    for (size_t i = 0; i < 20; i += 2)
-    {
-        // Odd round
-        quarter_round(working_block[0], working_block[4], working_block[8], working_block[12]);
-        quarter_round(working_block[1], working_block[5], working_block[9], working_block[13]);
-        quarter_round(working_block[2], working_block[6], working_block[10], working_block[14]);
-        quarter_round(working_block[3], working_block[7], working_block[11], working_block[15]);
-
-        // Even round
-        quarter_round(working_block[0], working_block[5], working_block[10], working_block[15]);
-        quarter_round(working_block[1], working_block[6], working_block[11], working_block[12]);
-        quarter_round(working_block[2], working_block[7], working_block[8], working_block[13]);
-        quarter_round(working_block[3], working_block[4], working_block[9], working_block[14]);
-    }
-
-    // Menambahkan hasil block akhir ke block awal
-    for (size_t i = 0; i < 16; ++i)
-    {
-        block[i] += working_block[i];
-    }
-}
-
-// Fungsi untuk enkripsi menggunakan ChaCha20
-void chacha20_encrypt(const uint8_t *plaintext, size_t plaintext_len, uint8_t *ciphertext, const uint8_t key[CHACHA20_KEY_SIZE], const uint8_t nonce[CHACHA20_NONCE_SIZE])
-{
-    array<uint32_t, 16> state;
-    initialize_state(state, key, nonce);
-
-    for (size_t i = 0; i < plaintext_len; i += CHACHA20_BLOCK_SIZE)
-    {
-        array<uint32_t, 16> block = state; // Salin state ke block
-
-        // Proses block
-        chacha20_block(block);
-
-        // Encrypt block
-        for (size_t j = 0; j < CHACHA20_BLOCK_SIZE && (i + j) < plaintext_len; ++j)
-        {
-            ciphertext[i + j] = plaintext[i + j] ^ ((uint8_t *)block.data())[j];
-        }
-
-        // Increment block counter
-        state[12]++;
-    }
-}
 
 
 // Fungsi Caesar
@@ -175,7 +32,20 @@ string enkripsi_caesar(string plaintext, int kunci)
 
 string dekripsi_caesar(string ciphertext, int kunci)
 {
-    return enkripsi_caesar(ciphertext, -kunci); // Dekripsi adalah kebalikan dari enkripsi
+    string plaintext = "";
+    for (char c : ciphertext)
+    {
+        if (isalpha(c))
+        {
+            char base = isupper(c) ? 'A' : 'a';
+            plaintext += char((c - base - kunci + 26) % 26 + base);
+        }
+        else
+        {
+            plaintext += c;
+        }
+    }
+    return plaintext;// Dekripsi adalah kebalikan dari enkripsi
 }
 
 // Fungsi Vigenere
@@ -201,30 +71,88 @@ string enkripsi_viginere(string plaintext, string kunci)
 
 string dekripsi_viginere(string chipertext, string kunci)
 {
-    string plaintext = "";
+    string dekripsi = "";
     int keyIndex = 0;
     for (int i = 0; i < chipertext.length(); i++)
     {
         if (isalpha(chipertext[i]))
         {
             char offset = isupper(chipertext[i]) ? 'A' : 'a';
-            plaintext += (chipertext[i] - offset - (toupper(kunci[keyIndex]) - 'A') + 26) % 26 + offset;
+            dekripsi += (chipertext[i] - offset - (toupper(kunci[keyIndex]) - 'A') + 26) % 26 + offset;
             keyIndex = (keyIndex + 1) % kunci.length();
         }
         else
         {
-            plaintext += chipertext[i];
+            dekripsi += chipertext[i];
         }
     }
-    return plaintext;
+    return dekripsi;
 }
+
+
+// Fungsi untuk menghapus spasi 
+string hilangkanSpasi(string teks)
+{
+    string hasil = "";
+    for (char karakter : teks)
+    {
+        if (karakter != ' ') // Abaikan karakter spasi
+        {
+            hasil += karakter;
+        }
+    }
+    return hasil;
+}
+
+// Stream Cipher (XOR-based)
+string cipherStream(string teks, string kunci)
+{
+    teks = hilangkanSpasi(teks); // Hapus spasi
+    string hasil = "";
+    for (int i = 0; i < teks.size(); i++)
+    {
+        hasil += teks[i] ^ kunci[i % kunci.size()];
+    }
+    return hasil;
+}
+
+// Dekripsi Stream Cipher (XOR-based)
+string dekripsiStream(string cipherText, string kunci)
+{
+    return cipherStream(cipherText, kunci); // XOR adalah operasi yang simetris
+}
+
+// Block Cipher (XOR-based)
+string cipherBlok(string teks, string kunci)
+{
+    teks = hilangkanSpasi(teks); // Hapus spasi
+    int ukuranBlok = 4;
+    string hasil = "";
+    for (int i = 0; i < teks.size(); i += ukuranBlok)
+    {
+        string blok = teks.substr(i, ukuranBlok);
+        for (int j = 0; j < blok.size(); j++)
+        {
+            blok[j] ^= kunci[j % kunci.size()];
+        }
+        hasil += blok;
+    }
+    return hasil;
+}
+
+// Dekripsi Block Cipher (XOR-based)
+string dekripsiBlok(string cipherText, string kunci)
+{
+    return cipherBlok(cipherText, kunci); // XOR adalah operasi yang simetris
+}
+
 
 // Deklarasi fungsi
 void caesar();
 void viginere();
-void rc4();
-int chacha_procedural();
-void mix_caesar_viginere();
+void block_cipher();
+void stream_cipher();
+void mix_caesar_viginere_stream_block();
 
 int main()
 {
@@ -236,11 +164,11 @@ int main()
         cout << "=================================\n";
         cout << "| PROGRAM ENKRIPSI DAN DEKRIPSI |\n";
         cout << "=================================\n";
-        cout << "| 1. Caesar Chiper              |\n";
-        cout << "| 2. Vigenere Chiper            |\n";
-        cout << "| 3. Chacha20                   |\n";
-        cout << "| 4. RC4                        |\n";
-        cout << "| 5. Mix Caesar Viginere        |\n";
+        cout << "| 1. Caesar Cipher              |\n";
+        cout << "| 2. Vigenere Cipher            |\n";
+        cout << "| 3. Stream Ciphher             |\n";
+        cout << "| 4. Block Chipher              |\n";
+        cout << "| 5. Mix                        |\n";
         cout << "| 0. Exit                       |\n";
         cout << "=================================\n";
         cout << "Silahkan pilih menu : ";
@@ -265,21 +193,21 @@ int main()
 
         case 3:
         {
-            chacha_procedural();
+            stream_cipher();
             i = 0;
         }
             break;
 
         case 4:
         {
-            rc4();
+            block_cipher();
             i = 0;
         }
             break;
 
         case 5:
         {
-            mix_caesar_viginere();
+            mix_caesar_viginere_stream_block();
             i = 0;
         }
             break;
@@ -302,130 +230,206 @@ int main()
 // Fungsi untuk Caesar Cipher
 void caesar()
 {
-    string pesan_caesar;
-    int kunci_caesar;
+    string pesan;
+    int kunci;
+    string Hasil;
+    int pilih;
+    cout << "1. Enkripsi \n2. Dekripsi \n";
+    cout << "Silahkan pilih menu : ";
+    cin >> pilih;
 
     cout << "Masukkan pesan: ";
-    getline(cin, pesan_caesar);
+    cin.ignore();
+    getline(cin, pesan);
 
-    cout << "Masukkan kunci (bilangan bulat): ";
-    cin >> kunci_caesar;
+    cout << "Masukkan kunci (biangan bulat): ";
+    cin >> kunci;
 
-    string pesan_terenkripsi = enkripsi_caesar(pesan_caesar, kunci_caesar);
-    cout << "Pesan terenkripsi: " << pesan_terenkripsi << endl;
+    switch (pilih)
+        {
+        case 1:
+        {
+            Hasil = enkripsi_caesar(pesan,kunci);  
+        }
+            break;
 
-    string pesan_terdekripsi = dekripsi_caesar(pesan_terenkripsi, kunci_caesar);
-    cout << "Pesan terdekripsi: " << pesan_terdekripsi << endl;
+        case 2:
+        {
+            Hasil = dekripsi_caesar(pesan,kunci);  
+        }
+            break;
+        }
+     cout << "Hasil : " << Hasil << endl << endl ;
 }
 
-// Fungsi untuk Vigenere Cipher
+// Fungsi untuk Vigenere Cipher1
+
 void viginere()
 {
-    string pesan_viginere;
-    string kunci_viginere;
+    string pesan;
+    string kunci;
+    string Hasil;
+    int pilih;
+    cout << "1. Enkripsi \n2. Dekripsi \n";
+    cout << "Silahkan pilih menu : ";
+    cin >> pilih;
 
     cout << "Masukkan pesan: ";
-    getline(cin, pesan_viginere);
+    cin.ignore();
+    getline(cin, pesan);
 
     cout << "Masukkan kunci (kata): ";
-    getline(cin, kunci_viginere);
+    getline(cin, kunci);
 
-    string pesan_terenkripsi = enkripsi_viginere(pesan_viginere, kunci_viginere);
-    cout << "Pesan terenkripsi: " << pesan_terenkripsi << endl;
+    switch (pilih)
+        {
+        case 1:
+        {
+            Hasil = enkripsi_viginere(pesan,kunci);  
+        }
+            break;
 
-    string pesan_terdekripsi = dekripsi_viginere(pesan_terenkripsi, kunci_viginere);
-    cout << "Pesan terdekripsi: " << pesan_terdekripsi << endl;
+        case 2:
+        {
+            Hasil = dekripsi_viginere(pesan,kunci);  
+        }
+            break;
+        }
+     cout << "Hasil : " << Hasil << endl << endl ;
 }
 
-void rc4()
+void block_cipher()
 {
-    string key, plaintext;
+    int pilih;
+    string pesan , kunci ,Hasil;
+    cout << "1. Enkripsi \n2. Dekripsi \n";
+    cout << "Silahkan pilih menu : ";
+    cin >> pilih;
 
-    // Input kunci dan plaintext
-    cout << "Masukkan kunci: ";
-    getline(cin, key);
-    cout << "Masukkan plaintext: ";
-    getline(cin, plaintext);
-
-    // Enkripsi
-    string ciphertext = rc4(key, plaintext);
-    cout << "Hasil enkripsi (dalam heksadesimal): ";
-    printHex(ciphertext);
-
-    // Dekripsi (dapat menggunakan fungsi yang sama)
-    string decrypted = rc4(key, ciphertext);
-    cout << "Hasil dekripsi: " << decrypted << endl;
-}
-
-int chacha_procedural()
-{
-    // Key (32 bytes untuk ChaCha20)
-    uint8_t key[CHACHA20_KEY_SIZE];
-    for (size_t i = 0; i < CHACHA20_KEY_SIZE; ++i)
-    {
-        key[i] = static_cast<uint8_t>(i); // Contoh key (harusnya acak)
-    }
-
-    // Nonce (12 bytes untuk ChaCha20)
-    uint8_t nonce[CHACHA20_NONCE_SIZE] = {0}; // Contoh nonce (harusnya acak)
-
-    // Input plaintext dari user
-    string input;
     cout << "Masukkan pesan: ";
-    getline(cin, input);
-    size_t plaintext_len = input.length();
+    cin.ignore();
+    getline(cin, pesan);
+    cout << "Masukkan kunci (jumlah char sama): ";
+    getline(cin, kunci);
 
-    // Buffer untuk ciphertext dan decrypted text
-    vector<uint8_t> ciphertext(plaintext_len);
-    vector<uint8_t> decryptedtext(plaintext_len + 1); // +1 untuk null terminator
+    switch (pilih)
+        {
+        case 1:
+        {
+            Hasil = cipherBlok(pesan,kunci);  
+        }
+            break;
 
-    // Enkripsi
-    chacha20_encrypt(reinterpret_cast<const uint8_t *>(input.c_str()), plaintext_len, ciphertext.data(), key, nonce);
+        case 2:
+        {
+            Hasil = dekripsiBlok(pesan,kunci);  
+        }
+            break;
+        }
+     cout << "Hasil : " << Hasil << endl << endl ;
+}
 
-    // Output ciphertext
-    cout << "Enkripsi: ";
-    for (size_t i = 0; i < plaintext_len; i++)
-    {
-        printf("%02x ", ciphertext[i]);
-    }
-    cout << endl;
+void stream_cipher()
+{
+    int pilih;
+    string pesan , kunci ,Hasil;
+    cout << "1. Enkripsi \n2. Dekripsi \n";
+    cout << "Silahkan pilih menu : ";
+    cin >> pilih;
 
-    // Dekripsi (ChaCha20 encryption dan decryption sama)
-    chacha20_encrypt(ciphertext.data(), plaintext_len, decryptedtext.data(), key, nonce);
-    decryptedtext[plaintext_len] = '\0'; // Null-terminate
+    cout << "Masukkan pesan: ";
+    cin.ignore();
+    getline(cin, pesan);
+    cout << "Masukkan kunci (jumlah char sama): ";
+    getline(cin, kunci);
 
-    // Output decrypted text
-    cout << "Dekripsi: " << decryptedtext.data() << endl;
+    switch (pilih)
+        {
+        case 1:
+        {
+            Hasil = cipherStream(pesan,kunci);  
+        }
+            break;
 
-    return 0;
+        case 2:
+        {
+            Hasil = dekripsiStream(pesan,kunci);  
+        }
+            break;
+        }
+     cout << "Hasil : " << Hasil << endl << endl ;
 }
 
 // Fungsi Mix Caesar dan Vigenere
-void mix_caesar_viginere()
+// Fungsi Mix dari Caesar, Vigenere, Stream, dan Block Cipher
+void mix_caesar_viginere_stream_block()
 {
-    string pesan;
-    string kunci_viginere;
-    int kunci_caesar;
+    string pesan, kunci_vigenere, kunci_stream, kunci_block;
+    int kunci_caesar, pilih;
+
+    cout << "1. Enkripsi \n2. Dekripsi \n";
+    cout << "Silahkan pilih menu : ";
+    cin >> pilih;
+    cin.ignore();
 
     cout << "Masukkan pesan: ";
     getline(cin, pesan);
 
+    // Input kunci untuk keempat metode
     cout << "Masukkan kunci Vigenere (kata): ";
-    getline(cin, kunci_viginere);
+    getline(cin, kunci_vigenere);
 
     cout << "Masukkan kunci Caesar (bilangan bulat): ";
     cin >> kunci_caesar;
     cin.ignore(); // Bersihkan buffer setelah input bilangan bulat
 
-    // Enkripsi Caesar terlebih dahulu
-    string pesan_terenkripsi_caesar = enkripsi_caesar(pesan, kunci_caesar);
-    // Lanjutkan dengan enkripsi Vigenere
-    string pesan_terenkripsi_mix = enkripsi_viginere(pesan_terenkripsi_caesar, kunci_viginere);
-    cout << "Pesan terenkripsi dengan Mix Caesar dan Vigenere: " << pesan_terenkripsi_mix << endl;
+    cout << "Masukkan kunci Stream Cipher (jumlah karakter sama): ";
+    getline(cin, kunci_stream);
 
-    // Dekripsi Vigenere terlebih dahulu
-    string pesan_terdekripsi_viginere = dekripsi_viginere(pesan_terenkripsi_mix, kunci_viginere);
-    // Lanjutkan dengan dekripsi Caesar
-    string pesan_terdekripsi_mix = dekripsi_caesar(pesan_terdekripsi_viginere, kunci_caesar);
-    cout << "Pesan terdekripsi dengan Mix Caesar dan Vigenere: " << pesan_terdekripsi_mix << endl;
+    cout << "Masukkan kunci Block Cipher (jumlah karakter sama): ";
+    getline(cin, kunci_block);
+
+    string hasil;
+    
+    switch (pilih)
+    {
+    case 1: // Enkripsi
+    {
+        // Langkah pertama: Enkripsi menggunakan Caesar
+        string enkripsi_caesar_hasil = enkripsi_caesar(pesan, kunci_caesar);
+
+        // Langkah kedua: Enkripsi menggunakan Vigenere
+        string enkripsi_vigenere_hasil = enkripsi_viginere(enkripsi_caesar_hasil, kunci_vigenere);
+
+        // Langkah ketiga: Enkripsi menggunakan Stream Cipher
+        string enkripsi_stream_hasil = cipherStream(enkripsi_vigenere_hasil, kunci_stream);
+
+        // Langkah keempat: Enkripsi menggunakan Block Cipher
+        hasil = cipherBlok(enkripsi_stream_hasil, kunci_block);
+
+        cout << "Pesan terenkripsi dengan campuran: " << hasil << endl;
+        break;
+    }
+    case 2: // Dekripsi
+    {
+        // Langkah pertama: Dekripsi menggunakan Block Cipher
+        string dekripsi_block_hasil = dekripsiBlok(pesan, kunci_block);
+
+        // Langkah kedua: Dekripsi menggunakan Stream Cipher
+        string dekripsi_stream_hasil = dekripsiStream(dekripsi_block_hasil, kunci_stream);
+
+        // Langkah ketiga: Dekripsi menggunakan Vigenere
+        string dekripsi_vigenere_hasil = dekripsi_viginere(dekripsi_stream_hasil, kunci_vigenere);
+
+        // Langkah keempat: Dekripsi menggunakan Caesar
+        hasil = dekripsi_caesar(dekripsi_vigenere_hasil, kunci_caesar);
+
+        cout << "Pesan terdekripsi dengan campuran: " << hasil << endl;
+        break;
+    }
+    default:
+        cout << "Pilihan tidak valid!" << endl;
+        break;
+    }
 }
+
